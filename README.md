@@ -23,7 +23,5 @@ To use this application, follow these steps:
 3. Run comparison.py
 4. Select two csv files with the browse option
 5. Select columns to show above row changes which you can use to identify data objects such as rows in the data
-```bash
-
 
 ![image](https://github.com/user-attachments/assets/ce8f7642-848c-40eb-9655-70df3333495c)
