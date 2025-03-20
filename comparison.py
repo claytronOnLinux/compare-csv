@@ -609,7 +609,7 @@ class CSVComparisonApp(ctk.CTk):
             status_text = f"Filtered by '{filter_text}'. "
             if exact_mode:
                 status_text += "Exact mode enabled. "
-            
+                
         if modified_count > 0:
             status_text += f"Modified: {modified_count}, "
         if only_in_file1_count > 0:
@@ -633,12 +633,102 @@ class CSVComparisonApp(ctk.CTk):
         elif only_in_file2_count > 0:
             self.results_tabs.set("Only in Second File")
 
+    def display_csv_format(self, filtered_modified, filtered_file1, filtered_file2, headers):
+        """Display results in CSV format in the text widgets"""
+        # Clear previous content
+        self.modified_text.delete("1.0", "end")
+        self.only_in_file1_text.delete("1.0", "end")
+        self.only_in_file2_text.delete("1.0", "end")
+        
+        # Display CSV format for modified rows
+        self.modified_text.insert("1.0", f"Modified Rows: {len(filtered_modified)}\n\n")
+        if filtered_modified:
+            # Create header row
+            header_row = "Item #,Name"
+            for h in headers:
+                header_row += f",{h} (Old),{h} (New)"
+            self.modified_text.insert("end", header_row + "\n")
+            
+            # Create data rows
+            for i, item in enumerate(filtered_modified):
+                name_parts = [item["row"][col] for col in self.name_columns]
+                name_display = " ".join(name_parts)
+                
+                row = f"{i+1},{name_display}"
+                for j in range(len(headers)):
+                    old_val = item["row"][j] if j < len(item["row"]) else ""
+                    new_val = item["row2"][j] if j < len(item["row2"]) else ""
+                    row += f",{old_val},{new_val}"
+                
+                self.modified_text.insert("end", row + "\n")
+        
+        # Display CSV format for rows only in file 1
+        self.only_in_file1_text.insert("1.0", f"Rows only in first file: {len(filtered_file1)}\n\n")
+        if filtered_file1:
+            # Create header row
+            header_row = "Item #,Name," + ",".join(headers)
+            self.only_in_file1_text.insert("end", header_row + "\n")
+            
+            # Create data rows
+            for i, item in enumerate(filtered_file1):
+                name_parts = [item["row"][col] for col in self.name_columns]
+                name_display = " ".join(name_parts)
+                
+                row = f"{i+1},{name_display}"
+                for j in range(len(headers)):
+                    val = item["row"][j] if j < len(item["row"]) else ""
+                    row += f",{val}"
+                
+                self.only_in_file1_text.insert("end", row + "\n")
+        
+        # Display CSV format for rows only in file 2
+        self.only_in_file2_text.insert("1.0", f"Rows only in second file: {len(filtered_file2)}\n\n")
+        if filtered_file2:
+            # Create header row
+            header_row = "Item #,Name," + ",".join(headers)
+            self.only_in_file2_text.insert("end", header_row + "\n")
+            
+            # Create data rows
+            for i, item in enumerate(filtered_file2):
+                name_parts = [item["row"][col] for col in self.name_columns]
+                name_display = " ".join(name_parts)
+                
+                row = f"{i+1},{name_display}"
+                for j in range(len(headers)):
+                    val = item["row"][j] if j < len(item["row"]) else ""
+                    row += f",{val}"
+                
+                self.only_in_file2_text.insert("end", row + "\n")
+
+    def display_json_format(self, filtered_modified, filtered_file1, filtered_file2, headers):
+        """Display results in JSON format in the text widgets"""
+        # Clear previous content
+        self.modified_text.delete("1.0", "end")
+        self.only_in_file1_text.delete("1.0", "end")
+        self.only_in_file2_text.delete("1.0", "end")
+        
+        # Display JSON format for modified rows
+        modified_json = self.create_json_string(filtered_modified, "modified")
+        self.modified_text.insert("1.0", f"Modified Rows: {len(filtered_modified)}\n\n")
+        self.modified_text.insert("end", modified_json)
+        
+        # Display JSON format for rows only in file 1
+        file1_json = self.create_json_string(filtered_file1, "only_in_file1")
+        self.only_in_file1_text.insert("1.0", f"Rows only in first file: {len(filtered_file1)}\n\n")
+        self.only_in_file1_text.insert("end", file1_json)
+        
+        # Display JSON format for rows only in file 2
+        file2_json = self.create_json_string(filtered_file2, "only_in_file2")
+        self.only_in_file2_text.insert("1.0", f"Rows only in second file: {len(filtered_file2)}\n\n")
+        self.only_in_file2_text.insert("end", file2_json)
 
     
     def display_text_format(self, filtered_modified, filtered_file1, filtered_file2, headers, filter_text, exact_mode):
         """Display results in text format"""
         # Display modified rows
         self.modified_text.insert("1.0", f"Modified Rows: {len(filtered_modified)} (of {len(self.comparison_results[0]['modified'])})\n\n")
+        filter_text_lower = filter_text.lower() if filter_text else ""
+        
         for i, mod in enumerate(filtered_modified):
             # Get the name from the row data using name_columns
             name_parts = [mod["row"][col] for col in self.name_columns]
@@ -646,16 +736,30 @@ class CSVComparisonApp(ctk.CTk):
             
             self.modified_text.insert("end", f"{i+1}. {name_display}\n")
             
-            # If exact mode is enabled and filter is active, only show matching changes
-            if exact_mode and filter_text:
-                matching_changes = self.filter_changes(mod["changes"], filter_text, exact_mode)
-                for change in matching_changes:
-                    self.modified_text.insert("end", f"   Column '{change['column']}': '{change['old_value']}' → '{change['new_value']}'\n")
-
+            if filter_text:
+                if exact_mode:
+                    # In exact mode, only show columns that contain the filter text
+                    for change in mod["changes"]:
+                        col_str = str(change["column"]).lower()
+                        old_val_str = str(change["old_value"]).lower()
+                        new_val_str = str(change["new_value"]).lower()
+                        
+                        # Check if any part of this change contains the filter text
+                        if (filter_text_lower in col_str or 
+                            filter_text_lower in old_val_str or 
+                            filter_text_lower in new_val_str):
+                            self.modified_text.insert("end", 
+                                f"   Column '{change['column']}': '{change['old_value']}' → '{change['new_value']}'\n")
+                else:
+                    # When not in exact mode, show ALL columns that changed for matched rows
+                    for change in mod["changes"]:
+                        self.modified_text.insert("end", 
+                            f"   Column '{change['column']}': '{change['old_value']}' → '{change['new_value']}'\n")
             else:
-                # Show all changes
+                # No filter means show all changes
                 for change in mod["changes"]:
-                    self.modified_text.insert("end", f"   Column '{change['column']}': '{change['old_value']}' -> '{change['new_value']}'\n")
+                    self.modified_text.insert("end", 
+                        f"   Column '{change['column']}': '{change['old_value']}' → '{change['new_value']}'\n")
             
             self.modified_text.insert("end", "\n")
         
@@ -666,13 +770,22 @@ class CSVComparisonApp(ctk.CTk):
             name_display = " ".join(name_parts)
             self.only_in_file1_text.insert("end", f"{i+1}. {name_display}\n")
             
-            # If exact mode is enabled and filter is active, only show matching fields
-            if exact_mode and filter_text:
-                for j, val in enumerate(item["row"]):
-                    if j < len(headers) and filter_text in str(val).lower():
-                        self.only_in_file1_text.insert("end", f"   {headers[j]}: {val}\n")
+            # If filter is active, decide which fields to show
+            if filter_text:
+                if exact_mode:
+                    # In exact mode, only show fields that contain the filter text
+                    for j, val in enumerate(item["row"]):
+                        if j < len(headers):
+                            val_str = str(val).lower()
+                            if filter_text_lower in val_str:
+                                self.only_in_file1_text.insert("end", f"   {headers[j]}: {val}\n")
+                else:
+                    # Not in exact mode, show all fields for matched rows
+                    for j, val in enumerate(item["row"]):
+                        if j < len(headers):
+                            self.only_in_file1_text.insert("end", f"   {headers[j]}: {val}\n")
             else:
-                # Show all fields
+                # No filter means show all fields
                 for j, val in enumerate(item["row"]):
                     if j < len(headers):
                         self.only_in_file1_text.insert("end", f"   {headers[j]}: {val}\n")
@@ -686,174 +799,27 @@ class CSVComparisonApp(ctk.CTk):
             name_display = " ".join(name_parts)
             self.only_in_file2_text.insert("end", f"{i+1}. {name_display}\n")
             
-            # If exact mode is enabled and filter is active, only show matching fields
-            if exact_mode and filter_text:
-                for j, val in enumerate(item["row"]):
-                    if j < len(headers) and filter_text in str(val).lower():
-                        self.only_in_file2_text.insert("end", f"   {headers[j]}: {val}\n")
+            # If filter is active, decide which fields to show
+            if filter_text:
+                if exact_mode:
+                    # In exact mode, only show fields that contain the filter text
+                    for j, val in enumerate(item["row"]):
+                        if j < len(headers):
+                            val_str = str(val).lower()
+                            if filter_text_lower in val_str:
+                                self.only_in_file2_text.insert("end", f"   {headers[j]}: {val}\n")
+                else:
+                    # Not in exact mode, show all fields for matched rows
+                    for j, val in enumerate(item["row"]):
+                        if j < len(headers):
+                            self.only_in_file2_text.insert("end", f"   {headers[j]}: {val}\n")
             else:
-                # Show all fields
+                # No filter means show all fields
                 for j, val in enumerate(item["row"]):
                     if j < len(headers):
                         self.only_in_file2_text.insert("end", f"   {headers[j]}: {val}\n")
             
             self.only_in_file2_text.insert("end", "\n")
-    
-    def display_csv_format(self, filtered_modified, filtered_file1, filtered_file2, headers):
-        """Display results in CSV format"""
-        # Create CSV strings
-        modified_csv = self.create_csv_string(filtered_modified, headers, "modified")
-        file1_csv = self.create_csv_string(filtered_file1, headers, "only_in_file1")
-        file2_csv = self.create_csv_string(filtered_file2, headers, "only_in_file2")
-        
-        # Display in text widgets
-        self.modified_text.insert("1.0", modified_csv)
-        self.only_in_file1_text.insert("1.0", file1_csv)
-        self.only_in_file2_text.insert("1.0", file2_csv)
-    
-    def display_json_format(self, filtered_modified, filtered_file1, filtered_file2, headers):
-        """Display results in JSON format"""
-        # Create JSON strings
-        modified_json = self.create_json_string(filtered_modified, "modified")
-        file1_json = self.create_json_string(filtered_file1, "only_in_file1")
-        file2_json = self.create_json_string(filtered_file2, "only_in_file2")
-        
-        # Display in text widgets
-        self.modified_text.insert("1.0", modified_json)
-        self.only_in_file1_text.insert("1.0", file1_json)
-        self.only_in_file2_text.insert("1.0", file2_json)
-    
-    def create_csv_string(self, items, headers, item_type):
-        """Create a CSV string from the filtered items"""
-        import io
-        output = io.StringIO()
-        writer = csv.writer(output)
-        
-        filter_text = self.filter_entry.get().lower()
-        exact_mode = self.exact_var.get()
-        
-        if not items:
-            return f"No {item_type.replace('_', ' ')} rows found."
-        
-        if item_type == "modified":
-            # Write header row for modified items
-            if exact_mode and filter_text:
-                # For exact mode, only include matching columns
-                modified_headers = ["Item #", "Name"]
-                for h in headers:
-                    if filter_text == h.lower().strip():
-                        modified_headers.extend([f"{h} (Old)", f"{h} (New)"])
-                modified_headers.append("Changes")
-                writer.writerow(modified_headers)
-                
-                # Write data rows
-                for i, item in enumerate(items):
-                    name_parts = [item["row"][col] for col in self.name_columns]
-                    name_display = " ".join(name_parts)
-                    
-                    # Filter changes to only include exact matches
-                    filtered_changes = []
-                    for change in item["changes"]:
-                        if (filter_text == str(change["column"]).lower().strip() or
-                            filter_text == str(change["old_value"]).lower().strip() or
-                            filter_text == str(change["new_value"]).lower().strip()):
-                            filtered_changes.append(change)
-                    
-                    # Create a string of filtered changes
-                    changes_str = "; ".join([
-                        f"{change['column']}: '{change['old_value']}' -> '{change['new_value']}'"
-                        for change in filtered_changes
-                    ])
-                    
-                    # Create row with only matching fields
-                    row_data = [str(i+1), name_display]
-                    for j, h in enumerate(headers):
-                        if filter_text == h.lower().strip():
-                            if j < len(item["row"]):
-                                row_data.append(item["row"][j])
-                            else:
-                                row_data.append("")
-                                
-                            if j < len(item["row2"]):
-                                row_data.append(item["row2"][j])
-                            else:
-                                row_data.append("")
-                    
-                    row_data.append(changes_str)
-                    writer.writerow(row_data)
-            else:
-                # Standard output for non-exact mode
-                modified_headers = ["Item #", "Name"]
-                for h in headers:
-                    modified_headers.extend([f"{h} (Old)", f"{h} (New)"])
-                modified_headers.append("Changes")
-                writer.writerow(modified_headers)
-                
-                # Write data rows
-                for i, item in enumerate(items):
-                    name_parts = [item["row"][col] for col in self.name_columns]
-                    name_display = " ".join(name_parts)
-                    
-                    # Create a string of changes
-                    changes_str = "; ".join([
-                        f"{change['column']}: '{change['old_value']}' -> '{change['new_value']}'"
-                        for change in item["changes"]
-                    ])
-                    
-                    # Create interleaved row with old and new values side by side
-                    row_data = [str(i+1), name_display]
-                    for j in range(len(headers)):
-                        if j < len(item["row"]):
-                            row_data.append(item["row"][j])
-                        else:
-                            row_data.append("")
-                            
-                        if j < len(item["row2"]):
-                            row_data.append(item["row2"][j])
-                        else:
-                            row_data.append("")
-                    
-                    row_data.append(changes_str)
-                    writer.writerow(row_data)
-        else:
-            # Write header row for items only in one file
-            if exact_mode and filter_text:
-                # For exact mode, only include matching columns
-                filtered_headers = ["Item #", "Name"]
-                for h in headers:
-                    for item in items:
-                        j = headers.index(h)
-                        if j < len(item["row"]) and filter_text == str(item["row"][j]).lower().strip():
-                            filtered_headers.append(h)
-                            break
-                writer.writerow(filtered_headers)
-                
-                # Write data rows with only matching fields
-                for i, item in enumerate(items):
-                    name_parts = [item["row"][col] for col in self.name_columns]
-                    name_display = " ".join(name_parts)
-                    
-                    row_data = [str(i+1), name_display]
-                    for h in filtered_headers[2:]:  # Skip Item # and Name
-                        j = headers.index(h)
-                        if j < len(item["row"]):
-                            row_data.append(item["row"][j])
-                        else:
-                            row_data.append("")
-                    
-                    writer.writerow(row_data)
-            else:
-                # Standard output for non-exact mode
-                writer.writerow(["Item #", "Name"] + headers)
-                
-                # Write data rows
-                for i, item in enumerate(items):
-                    name_parts = [item["row"][col] for col in self.name_columns]
-                    name_display = " ".join(name_parts)
-                    writer.writerow([str(i+1), name_display] + item["row"])
-        
-        return output.getvalue()
-
 
     
     def create_json_string(self, items, item_type):
@@ -1064,6 +1030,7 @@ class CSVComparisonApp(ctk.CTk):
         try:
             # Create a list of dictionaries for JSON output
             json_data = []
+            headers = self.filtered_results["headers"]
             
             for item in items:
                 if data_type == "modified":
@@ -1071,10 +1038,20 @@ class CSVComparisonApp(ctk.CTk):
                     name_parts = [item["row"][col] for col in self.name_columns]
                     name_display = " ".join(name_parts)
                     
+                    # Create dictionaries for original and new rows
+                    original_row = {}
+                    new_row = {}
+                    
+                    for i in range(min(len(headers), len(item["row"]))):
+                        original_row[headers[i]] = item["row"][i]
+                    
+                    for i in range(min(len(headers), len(item["row2"]))):
+                        new_row[headers[i]] = item["row2"][i]
+                    
                     json_item = {
                         "name": name_display,
-                        "original_row": {self.headers[i]: val for i, val in enumerate(item["row"]) if i < len(self.headers)},
-                        "new_row": {self.headers[i]: val for i, val in enumerate(item["row2"]) if i < len(self.headers)},
+                        "original_row": original_row,
+                        "new_row": new_row,
                         "changes": [
                             {
                                 "column": change["column"],
@@ -1089,20 +1066,26 @@ class CSVComparisonApp(ctk.CTk):
                     name_parts = [item["row"][col] for col in self.name_columns]
                     name_display = " ".join(name_parts)
                     
+                    # Create a dictionary for the row
+                    row_data = {}
+                    for i in range(min(len(headers), len(item["row"]))):
+                        row_data[headers[i]] = item["row"][i]
+                    
                     json_item = {
                         "name": name_display,
-                        "row": {self.headers[i]: val for i, val in enumerate(item["row"]) if i < len(self.headers)}
+                        "row": row_data
                     }
                 
                 json_data.append(json_item)
             
             # Write to file
-            with open(filename, 'w') as f:
+            with open(filename, 'w', encoding='utf-8') as f:
                 json.dump(json_data, f, indent=2)
             
             self.status_bar.configure(text=f"Results saved to {filename}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save JSON file: {str(e)}")
+
     
     def save_as_text(self, filename, items, data_type):
         """Save the filtered results as a text file"""
@@ -1156,72 +1139,82 @@ class CSVComparisonApp(ctk.CTk):
             messagebox.showerror("Error", f"Failed to save text file: {str(e)}")
     
     def filter_items(self, items, filter_text, exact_mode=False):
-        """Filter items based on filter text"""
+        """
+        Filter items based on filter text
+        
+        exact_mode: When True, filters for exact matches of the substring (case-insensitive)
+                    When False, allows for broader matching (e.g., partial word matches)
+        """
         if not filter_text:
             return items
         
         filtered_items = []
+        filter_text_lower = filter_text.lower()
         
         for item in items:
-            # For modified items, check both row data and changes
+            # For modified items (with changes)
             if "changes" in item:
-                if exact_mode:
-                    # Exact match for row values
-                    row_match = any(filter_text == str(val).lower().strip() for val in item["row"])
+                # Check if any changes match the filter
+                has_matching_changes = False
+                for change in item["changes"]:
+                    col_str = str(change["column"]).lower()
+                    old_val_str = str(change["old_value"]).lower()
+                    new_val_str = str(change["new_value"]).lower()
                     
-                    # Exact match for change values - specifically check new_value
-                    changes_match = any(
-                        filter_text == str(change["column"]).lower().strip() or
-                        filter_text == str(change["old_value"]).lower().strip() or
-                        filter_text == str(change["new_value"]).lower().strip()
-                        for change in item["changes"]
-                    )
-                else:
-                    # Contains match for row values
-                    row_match = any(filter_text in str(val).lower() for val in item["row"])
-                    
-                    # Contains match for change values
-                    changes_match = any(
-                        filter_text in str(change["column"]).lower() or
-                        filter_text in str(change["old_value"]).lower() or
-                        filter_text in str(change["new_value"]).lower()
-                        for change in item["changes"]
-                    )
+                    if filter_text_lower in col_str or filter_text_lower in old_val_str or filter_text_lower in new_val_str:
+                        has_matching_changes = True
+                        break
                 
-                if row_match or changes_match:
+                # Only include the item if at least one change matches the filter
+                if has_matching_changes:
                     filtered_items.append(item)
+            
+            # For items only in one file
             else:
-                # For non-modified items, just check row data
-                if exact_mode:
-                    if any(filter_text == str(val).lower().strip() for val in item["row"]):
-                        filtered_items.append(item)
-                else:
-                    if any(filter_text in str(val).lower() for val in item["row"]):
-                        filtered_items.append(item)
+                item_match = False
+                for val in item["row"]:
+                    val_str = str(val).lower()
+                    if filter_text_lower in val_str:
+                        item_match = True
+                        break
+                
+                if item_match:
+                    filtered_items.append(item)
         
         return filtered_items
 
+
     def filter_changes(self, changes, filter_text, exact_mode=False):
-        """Filter changes to only include those that match the filter text"""
+        """
+        Filter changes to only include those that match the filter text
+        
+        exact_mode: When True, requires the filter_text to match exactly as typed
+                    (case-sensitive). When False, case-insensitive match.
+        """
         if not filter_text:
             return changes
         
         filtered_changes = []
         
         for change in changes:
+            col_str = str(change["column"])
+            old_val_str = str(change["old_value"])
+            new_val_str = str(change["new_value"])
+            
             if exact_mode:
-                if (filter_text == str(change["column"]).lower().strip() or
-                    filter_text == str(change["old_value"]).lower().strip() or
-                    filter_text == str(change["new_value"]).lower().strip()):
+                # Case-sensitive substring match
+                if (filter_text in col_str or 
+                    filter_text in old_val_str or 
+                    filter_text in new_val_str):
                     filtered_changes.append(change)
             else:
-                if (filter_text in str(change["column"]).lower() or
-                    filter_text in str(change["old_value"]).lower() or
-                    filter_text in str(change["new_value"]).lower()):
+                # Case-insensitive substring match
+                if (filter_text.lower() in col_str.lower() or 
+                    filter_text.lower() in old_val_str.lower() or 
+                    filter_text.lower() in new_val_str.lower()):
                     filtered_changes.append(change)
         
         return filtered_changes
-
 
 
 if __name__ == "__main__":
