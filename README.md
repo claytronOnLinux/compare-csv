@@ -24,4 +24,4 @@ To use this application, follow these steps:
 4. Select two csv files with the browse option
 5. Select columns to show above row changes which you can use to identify data objects such as rows in the data
 
-![image](https://github.com/user-attachments/assets/ce8f7642-848c-40eb-9655-70df3333495c)
+![image](https://github.com/user-attachments/assets/56b9eabd-f0aa-405e-9997-0a8872ae7d8e)
